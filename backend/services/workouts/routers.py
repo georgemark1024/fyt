@@ -41,20 +41,20 @@ def create_workout_plan(workout_plan: WorkoutPlanCreate, session: SessionDepende
     session.refresh(db_workout_plan)
     return db_workout_plan
 
-@router.get("/workout-plan", response_model=WorkoutPlan)
+@router.get("/workout-plan", response_model=list[WorkoutPlanPublic])
 async def read_workout_plans(
         session: SessionDependency,
         offset: int = 0,
         limit: Annotated[int, Query(le=100)] = 100,
-) -> list[WorkoutPlan]:
+):
     workout_plans = session.exec(select(WorkoutPlan).offset(offset).limit(limit)).all()
 
     if workout_plans is None:
         raise HTTPException(status_code=404, detail="Workout plans not found")
     return workout_plans
 
-@router.get("/workout-plan/{workout_plan_id}", response_model=WorkoutPlan)
-async def read_workout_plan(workout_plan_id: int, session: SessionDependency) -> WorkoutPlan:
+@router.get("/workout-plan/{workout_plan_id}", response_model=WorkoutPlanPublic)
+async def read_workout_plan(workout_plan_id: int, session: SessionDependency):
     workout_plan = session.get(WorkoutPlan, workout_plan_id)
 
     if workout_plan is None:
@@ -62,14 +62,30 @@ async def read_workout_plan(workout_plan_id: int, session: SessionDependency) ->
     return workout_plan
 
 
-@router.patch("/workout-plan/{workout_plan_id}", response_model=WorkoutPlan)
-async def update_workout_plan(workout_plan_id : int, workout_plan: WorkoutPlan, session: SessionDependency) -> WorkoutPlan:
+@router.patch("/workout-plan/{workout_plan_id}", response_model=WorkoutPlanPublic)
+async def update_workout_plan(workout_plan_id : int, plan: WorkoutPlanCreate, session: SessionDependency):
     workout_plan = session.get(WorkoutPlan, workout_plan_id)
 
     if workout_plan is None:
         raise HTTPException(status_code=404, detail="Workout plan not found")
-    workout_plan_data = workout_plan.model_dump(exclude_unset=True)
+    
+    # Update scalar fields
+    workout_plan_data = plan.model_dump(exclude_unset=True)
     workout_plan.sqlmodel_update(workout_plan_data)
+
+    # Handle exercises update manually
+    if plan.exercises:
+        # Fetch actual Exercise objects
+        exercises = session.exec(
+            select(Exercise).where(Exercise.id.in_(plan.exercises)) # type: ignore
+        ).all()
+
+        if len(exercises) != len(plan.exercises):
+            raise HTTPException(status_code=400, detail="Some exercise IDs are invalid.")
+
+        # Replace the relationship
+        workout_plan.exercises = list(exercises)
+
     session.add(workout_plan)
     session.commit()
     session.refresh(workout_plan)

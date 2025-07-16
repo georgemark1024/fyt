@@ -18,7 +18,3 @@ app.include_router(workouts_routers.router)
 @app.get("/")
 async def root():
     return {"message": f"Welcome to Fyt Gym Tracker"}
-
-@app.get("/items/{item_id}")
-def read_item(item_id: int):
-    return {"item_id": item_id}
