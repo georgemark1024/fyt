@@ -1,9 +1,8 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
-from workouts.database import create_db_and_tables
-from workouts import routers as workouts_routers
-from workouts import database
+from .database import create_db_and_tables
+from . import routers as workouts_routers
 
 @asynccontextmanager
 async def lifespan(lifespan_app: FastAPI):

@@ -1,20 +1,45 @@
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query
-from sqlmodel import select
-from .models import WorkoutPlan
-from .database import SessionDependency
+from sqlmodel import select, Session
+from .models import WorkoutPlan, Exercise, WorkoutPlanCreate, WorkoutPlanPublic
+from .database import SessionDependency, engine
+from .utils import create_exercises
 
 router = APIRouter(
     prefix="/workouts"
 )
 
-@router.post("/workout-plan", response_model=WorkoutPlan)
-def create_workout_plan(workout_plan: WorkoutPlan, session: SessionDependency) -> WorkoutPlan:
-    session.add(workout_plan)
+exercises_list = [
+    Exercise(name="Bicep curls"),
+    Exercise(name="Deadlift"),
+    Exercise(name="Squats"),
+]
+
+create_exercises(exercises_list, session = Session(engine))
+
+@router.post("/workout-plan", response_model=WorkoutPlanPublic)
+def create_workout_plan(workout_plan: WorkoutPlanCreate, session: SessionDependency):
+
+    # Fetch actual Exercise instances from DB
+    if workout_plan.exercises:
+        exercises = session.exec(select(Exercise).where(Exercise.id.in_(workout_plan.exercises))).all() # type: ignore
+        
+        if len(exercises) != len(workout_plan.exercises):
+            raise HTTPException(status_code=400, detail="One or more exercise IDs are invalid.")
+
+        # Convert WorkoutPlanCreate into a plain WorkoutPlan without exercises
+    db_workout_plan = WorkoutPlan(
+            name=workout_plan.name,
+            description=workout_plan.description,
+            reminder=workout_plan.reminder,
+            exercises = list(exercises),
+        )
+
+    session.add(db_workout_plan)
     session.commit()
-    session.refresh(workout_plan)
-    return workout_plan
+    session.refresh(db_workout_plan)
+    return db_workout_plan
 
 @router.get("/workout-plan", response_model=WorkoutPlan)
 async def read_workout_plans(
